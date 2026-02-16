@@ -2,6 +2,7 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@/infrastructure/database/prisma.service';
 import { WhisperService } from './services/whisper.service';
+import { GeminiSpeechService } from './services/gemini-speech.service';
 import { GptParserService } from './services/gpt-parser.service';
 import { GeminiParserService } from './services/gemini-parser.service';
 import { VoiceStorageService } from './services/voice-storage.service';
@@ -12,18 +13,22 @@ import { ProcessingStatus } from '@prisma/client';
 export class VoiceService {
   private readonly logger = new Logger(VoiceService.name);
   private readonly aiProvider: string;
+  private readonly sttProvider: string;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
     private readonly whisperService: WhisperService,
+    private readonly geminiSpeechService: GeminiSpeechService,
     private readonly gptParserService: GptParserService,
     private readonly geminiParserService: GeminiParserService,
     private readonly voiceStorageService: VoiceStorageService,
     private readonly transactionsService: TransactionsService,
   ) {
     this.aiProvider = this.configService.get<string>('AI_PROVIDER', 'gemini');
+    this.sttProvider = this.configService.get<string>('STT_PROVIDER', 'gemini');
     this.logger.log(`Using AI provider: ${this.aiProvider}`);
+    this.logger.log(`Using STT provider: ${this.sttProvider}`);
   }
 
   /**
@@ -50,11 +55,17 @@ export class VoiceService {
 
       this.logger.log(`Audio stored at: ${audioUrl}, duration: ${audioDuration}s`);
 
-      // 2. Transcribe with Whisper
-      const whisperResult = await this.whisperService.transcribe(audioFile, language);
-      transcript = whisperResult.text;
+      // 2. Transcribe with STT (Whisper or Gemini)
+      let sttResult;
+      if (this.sttProvider === 'openai') {
+        sttResult = await this.whisperService.transcribe(audioFile, language);
+        this.logger.log(`Whisper transcript: "${sttResult.text}"`);
+      } else {
+        sttResult = await this.geminiSpeechService.transcribe(audioFile, language);
+        this.logger.log(`Gemini transcript: "${sttResult.text}"`);
+      }
 
-      this.logger.log(`Whisper transcript: "${transcript}"`);
+      transcript = sttResult.text;
 
       // 3. Parse with AI (GPT or Gemini)
       if (this.aiProvider === 'openai') {
@@ -79,8 +90,8 @@ export class VoiceService {
           audioUrl,
           audioDurationSec: audioDuration,
           whisperTranscript: transcript,
-          whisperLanguage: whisperResult.language || language,
-          whisperConfidence: 0.95, // Whisper doesn't provide confidence, use default
+          whisperLanguage: sttResult.language || language,
+          whisperConfidence: 0.95, // STT doesn't provide confidence, use default
           gptParsedData: parsedData,
           gptModel: this.aiProvider === 'openai'
             ? this.gptParserService.getModelName()
