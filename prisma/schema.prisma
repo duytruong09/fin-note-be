@@ -1,0 +1,299 @@
+// This is your Prisma schema file
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// USER MANAGEMENT
+// ============================================
+
+model User {
+  id               String   @id @default(uuid())
+  email            String   @unique @db.VarChar(255)
+  passwordHash     String   @map("password_hash") @db.VarChar(255)
+  fullName         String?  @map("full_name") @db.VarChar(255)
+
+  // Preferences
+  preferredLanguage String  @default("vi") @map("preferred_language") @db.VarChar(2) // 'vi' or 'en'
+  defaultCurrency   String  @default("VND") @map("default_currency") @db.VarChar(3)
+  avatarUrl         String? @map("avatar_url") @db.Text
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  transactions          Transaction[]
+  categories            Category[]
+  budgets               Budget[]
+  voiceProcessingLogs   VoiceProcessingLog[]
+  tags                  Tag[]
+  settings              UserSettings?
+  refreshTokens         RefreshToken[]
+
+  @@index([email])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  token     String   @unique @db.Text
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
+}
+
+// ============================================
+// CATEGORIES
+// ============================================
+
+model Category {
+  id              String   @id @default(uuid())
+  userId          String?  @map("user_id") // NULL for system categories
+
+  name            String   @db.VarChar(100)
+  nameVi          String?  @map("name_vi") @db.VarChar(100)
+  nameEn          String?  @map("name_en") @db.VarChar(100)
+
+  icon            String?  @db.VarChar(50)  // Icon name/emoji
+  color           String?  @db.VarChar(20)  // Hex color
+  type            TransactionType @default(EXPENSE)
+
+  isSystem        Boolean  @default(false) @map("is_system")
+  parentCategoryId String? @map("parent_category_id") // For subcategories
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user              User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parentCategory    Category?    @relation("CategoryHierarchy", fields: [parentCategoryId], references: [id])
+  subcategories     Category[]   @relation("CategoryHierarchy")
+  transactions      Transaction[]
+  budgets           Budget[]
+
+  @@index([userId])
+  @@index([type])
+  @@index([isSystem])
+  @@map("categories")
+}
+
+// ============================================
+// TRANSACTIONS
+// ============================================
+
+model Transaction {
+  id              String   @id @default(uuid())
+  userId          String   @map("user_id")
+  categoryId      String?  @map("category_id")
+
+  // Transaction details
+  amount          Decimal  @db.Decimal(15, 2)
+  currency        String   @default("VND") @db.VarChar(3)
+  type            TransactionType @default(EXPENSE)
+
+  description     String?  @db.Text
+  transactionDate DateTime @default(now()) @map("transaction_date")
+  paymentMethod   PaymentMethod? @map("payment_method")
+  location        String?  @db.VarChar(255)
+  notes           String?  @db.Text
+
+  // Voice-specific fields
+  isVoiceCreated         Boolean  @default(false) @map("is_voice_created")
+  voiceAudioUrl          String?  @map("voice_audio_url") @db.Text
+  voiceTranscript        String?  @map("voice_transcript") @db.Text
+  voiceParsingConfidence Decimal? @map("voice_parsing_confidence") @db.Decimal(3, 2) // 0.00 - 1.00
+
+  // Timestamps
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at") // Soft delete
+
+  // Relations
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  tags     TransactionTag[]
+
+  @@index([userId])
+  @@index([transactionDate(sort: Desc)])
+  @@index([categoryId])
+  @@index([isVoiceCreated])
+  @@index([type])
+  @@map("transactions")
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  BANK_TRANSFER
+  EWALLET
+}
+
+// ============================================
+// BUDGETS
+// ============================================
+
+model Budget {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  categoryId String?  @map("category_id") // NULL for total budget
+
+  amount     Decimal  @db.Decimal(15, 2)
+  currency   String   @default("VND") @db.VarChar(3)
+  period     BudgetPeriod @default(MONTHLY)
+
+  startDate  DateTime @map("start_date")
+  endDate    DateTime @map("end_date")
+
+  alertThreshold Decimal @default(0.8) @map("alert_threshold") @db.Decimal(3, 2) // 0.80 = 80%
+  isActive       Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([categoryId])
+  @@index([isActive])
+  @@map("budgets")
+}
+
+enum BudgetPeriod {
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
+// ============================================
+// VOICE PROCESSING
+// ============================================
+
+model VoiceProcessingLog {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  transactionId String?  @map("transaction_id") // NULL if processing failed
+
+  // Audio information
+  audioUrl           String  @map("audio_url") @db.Text
+  audioDurationSec   Decimal @map("audio_duration_sec") @db.Decimal(6, 2)
+
+  // Whisper results
+  whisperTranscript  String  @map("whisper_transcript") @db.Text
+  whisperLanguage    String? @map("whisper_language") @db.VarChar(10)
+  whisperConfidence  Decimal @map("whisper_confidence") @db.Decimal(3, 2)
+
+  // GPT parsing results
+  gptParsedData      Json    @map("gpt_parsed_data") // Store the full parsed object
+  gptModel           String  @map("gpt_model") @db.VarChar(50)
+  gptConfidence      Decimal @map("gpt_confidence") @db.Decimal(3, 2)
+
+  // Processing metadata
+  processingTimeMs   Int     @map("processing_time_ms")
+  errorMessage       String? @map("error_message") @db.Text
+  status             ProcessingStatus @default(SUCCESS)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
+  @@map("voice_processing_logs")
+}
+
+enum ProcessingStatus {
+  SUCCESS
+  PARTIAL_SUCCESS  // Parsed but low confidence
+  FAILED_WHISPER
+  FAILED_PARSING
+  FAILED_UNKNOWN
+}
+
+// ============================================
+// TAGS
+// ============================================
+
+model Tag {
+  id     String @id @default(uuid())
+  userId String @map("user_id")
+  name   String @db.VarChar(50)
+  color  String @db.VarChar(20)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions TransactionTag[]
+
+  @@unique([userId, name])
+  @@index([userId])
+  @@map("tags")
+}
+
+model TransactionTag {
+  transactionId String @map("transaction_id")
+  tagId         String @map("tag_id")
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  tag         Tag         @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([transactionId, tagId])
+  @@map("transaction_tags")
+}
+
+// ============================================
+// USER SETTINGS
+// ============================================
+
+model UserSettings {
+  userId String @id @map("user_id")
+
+  // UI preferences
+  theme             String  @default("light") @db.VarChar(20)
+
+  // Notification settings
+  notificationEnabled Boolean @default(true) @map("notification_enabled")
+  budgetAlertEnabled  Boolean @default(true) @map("budget_alert_enabled")
+
+  // Voice settings
+  voiceAutoSubmit     Boolean @default(false) @map("voice_auto_submit") // Auto-save without review
+  voiceDefaultLang    String  @default("vi") @map("voice_default_lang") @db.VarChar(2)
+
+  // Transaction settings
+  defaultPaymentMethod PaymentMethod? @map("default_payment_method")
+
+  // Other settings
+  timezone      String @default("Asia/Ho_Chi_Minh") @db.VarChar(50)
+  settingsJson  Json?  @map("settings_json") // For additional flexible settings
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
+}
