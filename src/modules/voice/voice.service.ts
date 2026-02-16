@@ -1,7 +1,9 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@/infrastructure/database/prisma.service';
 import { WhisperService } from './services/whisper.service';
 import { GptParserService } from './services/gpt-parser.service';
+import { GeminiParserService } from './services/gemini-parser.service';
 import { VoiceStorageService } from './services/voice-storage.service';
 import { TransactionsService } from '../transactions/transactions.service';
 import { ProcessingStatus } from '@prisma/client';
@@ -9,14 +11,20 @@ import { ProcessingStatus } from '@prisma/client';
 @Injectable()
 export class VoiceService {
   private readonly logger = new Logger(VoiceService.name);
+  private readonly aiProvider: string;
 
   constructor(
+    private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
     private readonly whisperService: WhisperService,
     private readonly gptParserService: GptParserService,
+    private readonly geminiParserService: GeminiParserService,
     private readonly voiceStorageService: VoiceStorageService,
     private readonly transactionsService: TransactionsService,
-  ) {}
+  ) {
+    this.aiProvider = this.configService.get<string>('AI_PROVIDER', 'gemini');
+    this.logger.log(`Using AI provider: ${this.aiProvider}`);
+  }
 
   /**
    * Main voice processing pipeline
@@ -48,10 +56,14 @@ export class VoiceService {
 
       this.logger.log(`Whisper transcript: "${transcript}"`);
 
-      // 3. Parse with GPT
-      parsedData = await this.gptParserService.parseExpense(transcript, language);
-
-      this.logger.log(`GPT parsed:`, parsedData);
+      // 3. Parse with AI (GPT or Gemini)
+      if (this.aiProvider === 'openai') {
+        parsedData = await this.gptParserService.parseExpense(transcript, language);
+        this.logger.log(`GPT parsed:`, parsedData);
+      } else {
+        parsedData = await this.geminiParserService.parseExpense(transcript, language);
+        this.logger.log(`Gemini parsed:`, parsedData);
+      }
 
       // Determine status based on confidence
       if (parsedData.confidence < 0.5) {
@@ -70,7 +82,9 @@ export class VoiceService {
           whisperLanguage: whisperResult.language || language,
           whisperConfidence: 0.95, // Whisper doesn't provide confidence, use default
           gptParsedData: parsedData,
-          gptModel: this.gptParserService.getModelName(),
+          gptModel: this.aiProvider === 'openai'
+            ? this.gptParserService.getModelName()
+            : this.geminiParserService.getModelName(),
           gptConfidence: parsedData.confidence,
           processingTimeMs,
           status,
@@ -115,7 +129,9 @@ export class VoiceService {
             whisperLanguage: language,
             whisperConfidence: 0,
             gptParsedData: parsedData || {},
-            gptModel: this.gptParserService.getModelName(),
+            gptModel: this.aiProvider === 'openai'
+            ? this.gptParserService.getModelName()
+            : this.geminiParserService.getModelName(),
             gptConfidence: 0,
             processingTimeMs,
             status,
@@ -133,12 +149,19 @@ export class VoiceService {
    */
   async testParsing(userId: string, transcript: string, language: 'vi' | 'en') {
     try {
-      const parsedData = await this.gptParserService.parseExpense(transcript, language);
+      let parsedData;
+
+      if (this.aiProvider === 'openai') {
+        parsedData = await this.gptParserService.parseExpense(transcript, language);
+      } else {
+        parsedData = await this.geminiParserService.parseExpense(transcript, language);
+      }
 
       return {
         data: {
           transcript,
           parsed: parsedData,
+          aiProvider: this.aiProvider,
         },
       };
     } catch (error) {
