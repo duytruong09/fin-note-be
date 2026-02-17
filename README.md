@@ -284,6 +284,11 @@ npx prisma migrate resolve --rolled-back <migration_name>
 - ✅ Transactions (CRUD + Summary)
 - ✅ Voice Processing 🎤 (Whisper + GPT)
 
+**Documentation:**
+- `docs/GEMINI_FREE_SETUP.md` - Gemini API setup (free tier)
+- `docs/VOICE_API_GUIDE.md` - Voice API usage
+- `docs/POSTMAN_GUIDE.md` - API testing with Postman
+
 **Next Steps:**
 1. Test the backend (see commands below)
 2. Implement Frontend (React Native)
