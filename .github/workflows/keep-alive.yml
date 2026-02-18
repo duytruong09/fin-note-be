@@ -1,0 +1,48 @@
+name: Keep Render Service Alive
+
+# Ping Render service mỗi 10 phút để tránh auto-sleep (Free tier sleep sau 15 phút)
+# Lưu ý: GitHub Actions free tier giới hạn 2000 phút/tháng
+# Cron job này sẽ dùng ~4.3 phút/ngày (144 pings/ngày * 0.03 phút/ping)
+
+on:
+  schedule:
+    # Chạy mỗi 10 phút
+    # Syntax: "minute hour day month day-of-week"
+    # */10 = every 10 minutes
+    - cron: '*/10 * * * *'
+
+  # Cho phép trigger thủ công từ GitHub UI
+  workflow_dispatch:
+
+jobs:
+  ping-render:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ping Health Endpoint
+        run: |
+          echo "Pinging Render service at $(date)"
+
+          # Ping health endpoint
+          # -f: Fail silently on HTTP errors
+          # -s: Silent mode (no progress bar)
+          # -S: Show errors even in silent mode
+          # -o /dev/null: Discard response body
+          # -w "%{http_code}": Print only HTTP status code
+
+          HTTP_CODE=$(curl -f -s -S -o /dev/null -w "%{http_code}" https://fin-note-api.onrender.com/health)
+
+          echo "Response code: $HTTP_CODE"
+
+          if [ "$HTTP_CODE" -eq 200 ]; then
+            echo "✅ Service is healthy"
+          else
+            echo "⚠️ Service returned non-200 status"
+            # Don't fail the workflow - service might be starting up
+            exit 0
+          fi
+
+      - name: Log Result
+        if: always()
+        run: |
+          echo "Keep-alive ping completed at $(date)"

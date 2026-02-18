@@ -1,7 +1,10 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@/infrastructure/database/prisma.service';
 import { WhisperService } from './services/whisper.service';
+import { GeminiSpeechService } from './services/gemini-speech.service';
 import { GptParserService } from './services/gpt-parser.service';
+import { GeminiParserService } from './services/gemini-parser.service';
 import { VoiceStorageService } from './services/voice-storage.service';
 import { TransactionsService } from '../transactions/transactions.service';
 import { ProcessingStatus } from '@prisma/client';
@@ -9,14 +12,24 @@ import { ProcessingStatus } from '@prisma/client';
 @Injectable()
 export class VoiceService {
   private readonly logger = new Logger(VoiceService.name);
+  private readonly aiProvider: string;
+  private readonly sttProvider: string;
 
   constructor(
+    private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
     private readonly whisperService: WhisperService,
+    private readonly geminiSpeechService: GeminiSpeechService,
     private readonly gptParserService: GptParserService,
+    private readonly geminiParserService: GeminiParserService,
     private readonly voiceStorageService: VoiceStorageService,
     private readonly transactionsService: TransactionsService,
-  ) {}
+  ) {
+    this.aiProvider = this.configService.get<string>('AI_PROVIDER', 'gemini');
+    this.sttProvider = this.configService.get<string>('STT_PROVIDER', 'gemini');
+    this.logger.log(`Using AI provider: ${this.aiProvider}`);
+    this.logger.log(`Using STT provider: ${this.sttProvider}`);
+  }
 
   /**
    * Main voice processing pipeline
@@ -42,16 +55,26 @@ export class VoiceService {
 
       this.logger.log(`Audio stored at: ${audioUrl}, duration: ${audioDuration}s`);
 
-      // 2. Transcribe with Whisper
-      const whisperResult = await this.whisperService.transcribe(audioFile, language);
-      transcript = whisperResult.text;
+      // 2. Transcribe with STT (Whisper or Gemini)
+      let sttResult;
+      if (this.sttProvider === 'openai') {
+        sttResult = await this.whisperService.transcribe(audioFile, language);
+        this.logger.log(`Whisper transcript: "${sttResult.text}"`);
+      } else {
+        sttResult = await this.geminiSpeechService.transcribe(audioFile, language);
+        this.logger.log(`Gemini transcript: "${sttResult.text}"`);
+      }
 
-      this.logger.log(`Whisper transcript: "${transcript}"`);
+      transcript = sttResult.text;
 
-      // 3. Parse with GPT
-      parsedData = await this.gptParserService.parseExpense(transcript, language);
-
-      this.logger.log(`GPT parsed:`, parsedData);
+      // 3. Parse with AI (GPT or Gemini)
+      if (this.aiProvider === 'openai') {
+        parsedData = await this.gptParserService.parseExpense(transcript, language);
+        this.logger.log(`GPT parsed:`, parsedData);
+      } else {
+        parsedData = await this.geminiParserService.parseExpense(transcript, language);
+        this.logger.log(`Gemini parsed:`, parsedData);
+      }
 
       // Determine status based on confidence
       if (parsedData.confidence < 0.5) {
@@ -67,10 +90,12 @@ export class VoiceService {
           audioUrl,
           audioDurationSec: audioDuration,
           whisperTranscript: transcript,
-          whisperLanguage: whisperResult.language || language,
-          whisperConfidence: 0.95, // Whisper doesn't provide confidence, use default
+          whisperLanguage: sttResult.language || language,
+          whisperConfidence: 0.95, // STT doesn't provide confidence, use default
           gptParsedData: parsedData,
-          gptModel: this.gptParserService.getModelName(),
+          gptModel: this.aiProvider === 'openai'
+            ? this.gptParserService.getModelName()
+            : this.geminiParserService.getModelName(),
           gptConfidence: parsedData.confidence,
           processingTimeMs,
           status,
@@ -115,7 +140,9 @@ export class VoiceService {
             whisperLanguage: language,
             whisperConfidence: 0,
             gptParsedData: parsedData || {},
-            gptModel: this.gptParserService.getModelName(),
+            gptModel: this.aiProvider === 'openai'
+            ? this.gptParserService.getModelName()
+            : this.geminiParserService.getModelName(),
             gptConfidence: 0,
             processingTimeMs,
             status,
@@ -130,15 +157,50 @@ export class VoiceService {
 
   /**
    * Test parsing without audio (for development/testing)
+   * Now saves to database for callback button support
    */
   async testParsing(userId: string, transcript: string, language: 'vi' | 'en') {
+    const startTime = Date.now();
+
     try {
-      const parsedData = await this.gptParserService.parseExpense(transcript, language);
+      let parsedData;
+
+      if (this.aiProvider === 'openai') {
+        parsedData = await this.gptParserService.parseExpense(transcript, language);
+      } else {
+        parsedData = await this.geminiParserService.parseExpense(transcript, language);
+      }
+
+      const processingTimeMs = Date.now() - startTime;
+
+      // Save to database for callback button support
+      const log = await this.prisma.voiceProcessingLog.create({
+        data: {
+          userId,
+          audioUrl: 'text_input', // Marker for text-based input
+          audioDurationSec: 0,
+          whisperTranscript: transcript,
+          whisperLanguage: language,
+          whisperConfidence: 1.0, // Text input has 100% transcription confidence
+          gptParsedData: parsedData,
+          gptModel: this.aiProvider === 'openai'
+            ? this.gptParserService.getModelName()
+            : this.geminiParserService.getModelName(),
+          gptConfidence: parsedData.confidence,
+          processingTimeMs,
+          status: parsedData.confidence >= 0.5
+            ? ProcessingStatus.SUCCESS
+            : ProcessingStatus.PARTIAL_SUCCESS,
+        },
+      });
 
       return {
         data: {
+          logId: log.id,
           transcript,
           parsed: parsedData,
+          aiProvider: this.aiProvider,
+          processingTimeMs,
         },
       };
     } catch (error) {

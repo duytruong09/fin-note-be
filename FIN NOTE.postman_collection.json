@@ -1,0 +1,805 @@
+{
+  "info": {
+    "_postman_id": "7b17379f-37f1-40e3-af43-0975df0e855f",
+    "name": "FIN NOTE API",
+    "description": "Complete API collection for FIN-NOTE - Voice-enabled expense tracker",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "18845152",
+    "_collection_link": "https://go.postman.co/collection/18845152-7b17379f-37f1-40e3-af43-0975df0e855f?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "🏥 Health Check",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Comprehensive health check - returns server status, uptime, database connectivity"
+          },
+          "response": []
+        },
+        {
+          "name": "Readiness Probe",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health/ready",
+              "host": ["{{base_url}}"],
+              "path": ["health", "ready"]
+            },
+            "description": "Check if application is ready to serve traffic (Kubernetes readiness probe)"
+          },
+          "response": []
+        },
+        {
+          "name": "Liveness Probe",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health/live",
+              "host": ["{{base_url}}"],
+              "path": ["health", "live"]
+            },
+            "description": "Check if application is alive (Kubernetes liveness probe)"
+          },
+          "response": []
+        }
+      ],
+      "description": "Health check endpoints for monitoring"
+    },
+    {
+      "name": "🔐 Auth",
+      "item": [
+        {
+          "name": "Register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('access_token', response.data.accessToken);",
+                  "    pm.environment.set('refresh_token', response.data.refreshToken);",
+                  "    pm.environment.set('user_id', response.data.user.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\",\n  \"fullName\": \"Test User\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "register"]
+            },
+            "description": "Register new user account"
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('access_token', response.data.accessToken);",
+                  "    pm.environment.set('refresh_token', response.data.refreshToken);",
+                  "    pm.environment.set('user_id', response.data.user.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Login with email and password"
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('access_token', response.data.accessToken);",
+                  "    pm.environment.set('refresh_token', response.data.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "Refresh access token using refresh token"
+          },
+          "response": []
+        }
+      ],
+      "description": "Authentication endpoints"
+    },
+    {
+      "name": "📁 Categories",
+      "item": [
+        {
+          "name": "Get All Categories",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/categories",
+              "host": ["{{base_url}}"],
+              "path": ["categories"]
+            },
+            "description": "Get all categories (user + system)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get System Categories",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/categories/system",
+              "host": ["{{base_url}}"],
+              "path": ["categories", "system"]
+            },
+            "description": "Get system default categories"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Category",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Custom Category\",\n  \"nameVi\": \"Danh mục tùy chỉnh\",\n  \"nameEn\": \"Custom Category\",\n  \"icon\": \"🎯\",\n  \"color\": \"#FF6B6B\",\n  \"type\": \"EXPENSE\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/categories",
+              "host": ["{{base_url}}"],
+              "path": ["categories"]
+            },
+            "description": "Create new custom category"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Category by ID",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/categories/:id",
+              "host": ["{{base_url}}"],
+              "path": ["categories", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "category-id-here"
+                }
+              ]
+            },
+            "description": "Get category by ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Category",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Category Name\",\n  \"color\": \"#4ECDC4\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/categories/:id",
+              "host": ["{{base_url}}"],
+              "path": ["categories", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "category-id-here"
+                }
+              ]
+            },
+            "description": "Update category"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Category",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/categories/:id",
+              "host": ["{{base_url}}"],
+              "path": ["categories", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "category-id-here"
+                }
+              ]
+            },
+            "description": "Delete category"
+          },
+          "response": []
+        }
+      ],
+      "description": "Category management endpoints"
+    },
+    {
+      "name": "💰 Transactions",
+      "item": [
+        {
+          "name": "Create Transaction",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 50000,\n  \"type\": \"EXPENSE\",\n  \"categoryId\": \"category-id-here\",\n  \"description\": \"Ăn phở\",\n  \"transactionDate\": \"2026-02-16\",\n  \"paymentMethod\": \"CASH\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/transactions",
+              "host": ["{{base_url}}"],
+              "path": ["transactions"]
+            },
+            "description": "Create new transaction"
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Transactions",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/transactions?page=1&perPage=20&type=EXPENSE&startDate=2026-01-01&endDate=2026-12-31",
+              "host": ["{{base_url}}"],
+              "path": ["transactions"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "perPage",
+                  "value": "20"
+                },
+                {
+                  "key": "type",
+                  "value": "EXPENSE",
+                  "description": "EXPENSE or INCOME"
+                },
+                {
+                  "key": "startDate",
+                  "value": "2026-01-01"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2026-12-31"
+                },
+                {
+                  "key": "categoryId",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Get all transactions with filters"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Transaction Summary",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/transactions/summary?startDate=2026-02-01&endDate=2026-02-29",
+              "host": ["{{base_url}}"],
+              "path": ["transactions", "summary"],
+              "query": [
+                {
+                  "key": "startDate",
+                  "value": "2026-02-01"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2026-02-29"
+                }
+              ]
+            },
+            "description": "Get transaction summary (income, expense, balance)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Transaction by ID",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/transactions/:id",
+              "host": ["{{base_url}}"],
+              "path": ["transactions", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "transaction-id-here"
+                }
+              ]
+            },
+            "description": "Get transaction by ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Transaction",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 60000,\n  \"description\": \"Ăn phở - Updated\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/transactions/:id",
+              "host": ["{{base_url}}"],
+              "path": ["transactions", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "transaction-id-here"
+                }
+              ]
+            },
+            "description": "Update transaction"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Transaction",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/transactions/:id",
+              "host": ["{{base_url}}"],
+              "path": ["transactions", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "transaction-id-here"
+                }
+              ]
+            },
+            "description": "Delete transaction (soft delete)"
+          },
+          "response": []
+        }
+      ],
+      "description": "Transaction management endpoints"
+    },
+    {
+      "name": "🎤 Voice",
+      "item": [
+        {
+          "name": "Process Voice",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "audio",
+                  "type": "file",
+                  "src": [],
+                  "description": "Audio file (m4a, wav, mp3)"
+                },
+                {
+                  "key": "language",
+                  "value": "vi",
+                  "type": "text",
+                  "description": "Language: vi or en"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/voice/process",
+              "host": ["{{base_url}}"],
+              "path": ["voice", "process"]
+            },
+            "description": "Process voice input - Upload audio → Whisper transcription → GPT parsing"
+          },
+          "response": []
+        },
+        {
+          "name": "Test Parse",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transcript\": \"Hôm nay ăn phở 50 nghìn\",\n  \"language\": \"vi\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/voice/test-parse",
+              "host": ["{{base_url}}"],
+              "path": ["voice", "test-parse"]
+            },
+            "description": "Test parsing without audio upload (for development/testing)"
+          },
+          "response": []
+        },
+        {
+          "name": "Test Parse - More Examples",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transcript\": \"Hôm qua đi grab 45k bằng thẻ\",\n  \"language\": \"vi\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/voice/test-parse",
+              "host": ["{{base_url}}"],
+              "path": ["voice", "test-parse"]
+            },
+            "description": "Example: Grab ride with card payment"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Processing Logs",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/voice/logs?page=1&perPage=20",
+              "host": ["{{base_url}}"],
+              "path": ["voice", "logs"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "perPage",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Get voice processing logs (for debugging and analytics)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Statistics",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/voice/stats",
+              "host": ["{{base_url}}"],
+              "path": ["voice", "stats"]
+            },
+            "description": "Get voice processing statistics (success rate, avg confidence, etc.)"
+          },
+          "response": []
+        }
+      ],
+      "description": "Voice processing endpoints (Speech-to-Text + AI parsing)"
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refresh_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}

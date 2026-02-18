@@ -6,7 +6,7 @@ import {
   IsUUID,
   IsDateString,
   Min,
-} from 'class-validator';
+} from "class-validator";
 
 export class CreateTransactionDto {
   @IsNumber()
@@ -17,11 +17,11 @@ export class CreateTransactionDto {
   @IsString()
   currency?: string;
 
-  @IsIn(['INCOME', 'EXPENSE'])
-  type: 'INCOME' | 'EXPENSE';
+  @IsIn(["INCOME", "EXPENSE"])
+  type: "INCOME" | "EXPENSE";
 
   @IsOptional()
-  @IsUUID()
+  @IsString()
   categoryId?: string;
 
   @IsOptional()
@@ -33,8 +33,8 @@ export class CreateTransactionDto {
   transactionDate?: string;
 
   @IsOptional()
-  @IsIn(['CASH', 'CARD', 'BANK_TRANSFER', 'EWALLET'])
-  paymentMethod?: 'CASH' | 'CARD' | 'BANK_TRANSFER' | 'EWALLET';
+  @IsIn(["CASH", "CARD", "BANK_TRANSFER", "EWALLET"])
+  paymentMethod?: "CASH" | "CARD" | "BANK_TRANSFER" | "EWALLET";
 
   @IsOptional()
   @IsString()

@@ -1,0 +1,99 @@
+# Render Blueprint for FIN-NOTE Backend
+# This file enables Infrastructure as Code deployment on Render
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  # Main API Service
+  - type: web
+    name: fin-note-api
+    runtime: docker
+    plan: free # Free tier: 750 hours/month
+    region: singapore # Change to your preferred region: oregon, frankfurt, singapore
+    branch: master # Auto-deploy from this branch
+
+    # Health check endpoint
+    healthCheckPath: /health
+
+    # Environment variables
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      - key: NODE_OPTIONS
+        value: --max-old-space-size=460
+
+      - key: PORT
+        value: 3000
+
+      - key: API_VERSION
+        value: v1
+
+      # Database URL (will be set from Supabase or Render Postgres)
+      - key: DATABASE_URL
+        sync: false # Set manually in Render dashboard
+
+      # JWT Secrets (set these in Render dashboard - keep secret!)
+      - key: JWT_ACCESS_SECRET
+        generateValue: true # Auto-generate secure random value
+
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+
+      - key: JWT_ACCESS_EXPIRATION
+        value: 15m
+
+      - key: JWT_REFRESH_EXPIRATION
+        value: 7d
+
+      # OpenAI API (set in Render dashboard)
+      - key: OPENAI_API_KEY
+        sync: false
+
+      - key: OPENAI_MODEL_WHISPER
+        value: whisper-1
+
+      - key: OPENAI_MODEL_GPT
+        value: gpt-4o-mini-2024-07-18
+
+      # Gemini API (optional - for STT alternative)
+      - key: GEMINI_API_KEY
+        sync: false
+
+      - key: STT_PROVIDER
+        value: whisper # or 'gemini'
+
+      # Storage (local for free tier)
+      - key: STORAGE_TYPE
+        value: local
+
+      - key: STORAGE_PATH
+        value: /tmp/uploads # Use /tmp on Render
+
+      # CORS (update with your frontend URL)
+      - key: CORS_ORIGIN
+        value: http://localhost:19006,https://your-frontend-domain.com
+
+      # Logging
+      - key: LOG_LEVEL
+        value: info # Use 'info' in production, not 'debug'
+
+      # Voice processing limits
+      - key: MAX_AUDIO_FILE_SIZE_MB
+        value: 10
+
+      - key: MAX_AUDIO_DURATION_SEC
+        value: 60
+
+      # Telegram Bot (optional)
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+
+      - key: TELEGRAM_WEBHOOK_URL
+        value: https://fin-note-api.onrender.com/telegram/webhook # Update with your Render URL
+
+# Optional: Render Postgres Database (not recommended for free tier - use Supabase instead)
+# databases:
+#   - name: fin-note-db
+#     plan: free # Free for 90 days, then $7/month
+#     databaseName: finnote_prod
+#     user: finnote_user
