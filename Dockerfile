@@ -9,17 +9,20 @@ WORKDIR /app
 COPY package*.json ./
 COPY prisma ./prisma/
 
-# Install dependencies
+# Install dependencies (including dev dependencies for build)
 RUN npm ci
 
 # Copy source code
 COPY . .
 
-# Generate Prisma Client
+# Generate Prisma Client with optimized binary targets
 RUN npx prisma generate
 
 # Build the application
 RUN npm run build
+
+# Remove dev dependencies after build
+RUN npm prune --production
 
 # Stage 2: Production
 FROM node:20-alpine AS runner
@@ -32,16 +35,19 @@ RUN apk add --no-cache dumb-init
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && adduser -S nestjs -u 1001
 
-# Copy package files
-COPY package*.json ./
-COPY prisma ./prisma/
+# Copy package files and prisma schema
+COPY --chown=nestjs:nodejs package*.json ./
+COPY --chown=nestjs:nodejs prisma ./prisma/
 
-# Install only production dependencies
-RUN npm ci --only=production && npm cache clean --force
+# Copy production dependencies and Prisma Client from builder
+COPY --from=builder --chown=nestjs:nodejs /app/node_modules ./node_modules
 
 # Copy built application from builder
 COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
-COPY --from=builder --chown=nestjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
+
+# Copy migration script
+COPY --chown=nestjs:nodejs scripts/render-migrate.sh ./scripts/
+RUN chmod +x ./scripts/render-migrate.sh
 
 # Switch to non-root user
 USER nestjs
@@ -57,4 +63,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=30s \
 ENTRYPOINT ["dumb-init", "--"]
 
 # Run migrations and start the application
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main"]
+CMD ["./scripts/render-migrate.sh"]

@@ -19,6 +19,9 @@ services:
       - key: NODE_ENV
         value: production
 
+      - key: NODE_OPTIONS
+        value: --max-old-space-size=460
+
       - key: PORT
         value: 3000
 
