@@ -22,7 +22,11 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
-    "prisma:seed": "ts-node prisma/seed.ts"
+    "prisma:seed": "ts-node prisma/seed.ts",
+    "docker:build": "docker build -t fin-note-api .",
+    "docker:run": "docker run -p 3000:3000 --env-file .env fin-note-api",
+    "docker:test": "npm run docker:build && npm run docker:run",
+    "deploy:check": "echo 'Checking deployment readiness...' && npm run lint && npm run build && echo 'Ready to deploy!'"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
