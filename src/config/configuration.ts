@@ -38,4 +38,9 @@ export default () => ({
   cors: {
     origin: process.env.CORS_ORIGIN || '*',
   },
+
+  telegram: {
+    botToken: process.env.TELEGRAM_BOT_TOKEN,
+    webhookUrl: process.env.TELEGRAM_WEBHOOK_URL,
+  },
 });

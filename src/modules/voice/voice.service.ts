@@ -157,8 +157,11 @@ export class VoiceService {
 
   /**
    * Test parsing without audio (for development/testing)
+   * Now saves to database for callback button support
    */
   async testParsing(userId: string, transcript: string, language: 'vi' | 'en') {
+    const startTime = Date.now();
+
     try {
       let parsedData;
 
@@ -168,11 +171,36 @@ export class VoiceService {
         parsedData = await this.geminiParserService.parseExpense(transcript, language);
       }
 
+      const processingTimeMs = Date.now() - startTime;
+
+      // Save to database for callback button support
+      const log = await this.prisma.voiceProcessingLog.create({
+        data: {
+          userId,
+          audioUrl: 'text_input', // Marker for text-based input
+          audioDurationSec: 0,
+          whisperTranscript: transcript,
+          whisperLanguage: language,
+          whisperConfidence: 1.0, // Text input has 100% transcription confidence
+          gptParsedData: parsedData,
+          gptModel: this.aiProvider === 'openai'
+            ? this.gptParserService.getModelName()
+            : this.geminiParserService.getModelName(),
+          gptConfidence: parsedData.confidence,
+          processingTimeMs,
+          status: parsedData.confidence >= 0.5
+            ? ProcessingStatus.SUCCESS
+            : ProcessingStatus.PARTIAL_SUCCESS,
+        },
+      });
+
       return {
         data: {
+          logId: log.id,
           transcript,
           parsed: parsedData,
           aiProvider: this.aiProvider,
+          processingTimeMs,
         },
       };
     } catch (error) {

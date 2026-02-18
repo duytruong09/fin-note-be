@@ -286,6 +286,10 @@ model UserSettings {
   // Transaction settings
   defaultPaymentMethod PaymentMethod? @map("default_payment_method")
 
+  // Telegram integration (user-level)
+  telegramChatId String? @unique @map("telegram_chat_id") @db.VarChar(50)
+  telegramUserId String? @unique @map("telegram_user_id") @db.VarChar(50)
+
   // Other settings
   timezone     String @default("Asia/Ho_Chi_Minh") @db.VarChar(50)
   settingsJson Json?  @map("settings_json") // For additional flexible settings
@@ -296,4 +300,25 @@ model UserSettings {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_settings")
+}
+
+// ============================================
+// SYSTEM SETTINGS
+// ============================================
+
+model Setting {
+  id          String  @id @default(uuid())
+  key         String  @unique @db.VarChar(100) // "telegram_enabled", "feature_voice_enabled", etc.
+  value       String? @db.Text
+  description String? @db.Text
+  options     Json?   // For complex settings like arrays, objects
+  isSecret    Boolean @default(false) @map("is_secret") // Hide from public API
+  isPublic    Boolean @default(false) @map("is_public") // Available to mobile app
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([key])
+  @@index([isPublic])
+  @@map("settings")
 }
