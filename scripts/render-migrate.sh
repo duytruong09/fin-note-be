@@ -14,11 +14,18 @@ fi
 
 echo "✅ DATABASE_URL is set"
 
-# For migrations, we need direct connection (port 5432)
-# Replace pooler port 6543 with direct port 5432 and remove pgbouncer flag
-MIGRATION_URL=$(echo $DATABASE_URL | sed 's/:6543\//:5432\//g' | sed 's/&pgbouncer=true//g' | sed 's/?pgbouncer=true&/?/g')
+# Check if using pooler or direct connection
+if echo "$DATABASE_URL" | grep -q "6543"; then
+  echo "🔄 Using pooler connection for migrations (session mode)..."
+  # Pooler with session mode works for migrations
+  # Just ensure pgbouncer=true is NOT set (or use session mode)
+  MIGRATION_URL=$(echo $DATABASE_URL | sed 's/&pgbouncer=true//g' | sed 's/?pgbouncer=true&/?/g')
+else
+  echo "🔄 Using direct connection for migrations..."
+  MIGRATION_URL="$DATABASE_URL"
+fi
 
-echo "🔄 Running migrations with direct connection..."
+echo "📊 Migration URL (host hidden for security)"
 DATABASE_URL="$MIGRATION_URL" npx prisma migrate deploy
 
 echo "✅ Migrations completed successfully"
