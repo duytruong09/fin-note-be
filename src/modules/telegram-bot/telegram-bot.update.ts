@@ -11,7 +11,7 @@ import { TelegramUserDto } from './dto/telegram-user.dto';
 export class TelegramBotUpdate implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(TelegramBotUpdate.name);
   private bot: Telegraf;
-  private botToken: string;
+  private botToken: string | null = null;
   private isRunning = false;
   private maxRetries = 5;
   private retryCount = 0;
