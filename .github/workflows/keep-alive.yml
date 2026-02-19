@@ -30,7 +30,7 @@ jobs:
           # -o /dev/null: Discard response body
           # -w "%{http_code}": Print only HTTP status code
 
-          HTTP_CODE=$(curl -f -s -S -o /dev/null -w "%{http_code}" https://fin-note-api.onrender.com/health)
+          HTTP_CODE=$(curl -f -s -S -o /dev/null -w "%{http_code}" https://fin-note-api.onrender.com/api/v1/health)
 
           echo "Response code: $HTTP_CODE"
 
