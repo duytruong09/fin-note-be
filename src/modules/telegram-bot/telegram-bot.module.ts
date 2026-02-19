@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TelegramBotUpdate } from './telegram-bot.update';
+import { TelegramBotController } from './telegram-bot.controller';
 import { TelegramAuthService } from './services/telegram-auth.service';
 import { TelegramVoiceService } from './services/telegram-voice.service';
 import { PrismaModule } from '@/infrastructure/database/prisma.module';
@@ -14,6 +15,7 @@ import { TransactionsModule } from '../transactions/transactions.module';
     VoiceModule,
     TransactionsModule,
   ],
+  controllers: [TelegramBotController],
   providers: [
     TelegramBotUpdate,
     TelegramAuthService,
