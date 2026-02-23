@@ -9,7 +9,10 @@ import { CategoriesModule } from './modules/categories/categories.module';
 import { TransactionsModule } from './modules/transactions/transactions.module';
 import { VoiceModule } from './modules/voice/voice.module';
 import { HealthModule } from './modules/health/health.module';
-import { TelegramBotModule } from './modules/telegram-bot/telegram-bot.module';
+// import { TelegramBotModule } from './modules/telegram-bot/telegram-bot.module';
+import { BudgetsModule } from './modules/budgets/budgets.module';
+import { ReportsModule } from './modules/reports/reports.module';
+import { UserSettingsModule } from './modules/user-settings/user-settings.module';
 
 @Module({
   imports: [
@@ -30,8 +33,10 @@ import { TelegramBotModule } from './modules/telegram-bot/telegram-bot.module';
     CategoriesModule,
     TransactionsModule,
     VoiceModule,
-    TelegramBotModule,
-    // BudgetsModule,
+    // TelegramBotModule,
+    BudgetsModule,
+    ReportsModule,
+    UserSettingsModule,
     // UsersModule,
   ],
   controllers: [],

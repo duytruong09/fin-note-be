@@ -23,8 +23,13 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         console.error(`❌ Database connection attempt ${retries}/${maxRetries} failed:`, error.message);
 
         if (retries >= maxRetries) {
-          console.error('❌ Max database connection retries reached. Exiting...');
-          throw error;
+          console.error('❌ Max database connection retries reached.');
+          console.error('⚠️  App will start without database. Please check DATABASE_URL configuration.');
+          console.error('💡 Tip: For Render with Supabase, use port 6543 with pgbouncer=true');
+
+          // Don't throw - allow app to start even without DB
+          // This allows Render to detect the port and health checks to work
+          return;
         }
 
         // Wait before retrying (exponential backoff)
