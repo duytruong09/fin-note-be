@@ -1,0 +1,28 @@
+# Dependencies
+node_modules
+dist
+build
+
+# Coverage
+coverage
+
+# Prisma
+prisma/migrations
+
+# Environment
+.env
+.env.*
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+
+# IDE
+.idea
+.vscode
+
+# Generated files
+*.gen.ts
+*.generated.ts
