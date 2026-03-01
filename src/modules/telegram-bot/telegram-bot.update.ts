@@ -13,8 +13,10 @@ export class TelegramBotUpdate implements OnModuleInit, OnModuleDestroy {
   private bot: Telegraf;
   private botToken: string | null = null;
   private isRunning = false;
-  private maxRetries = 5;
+  private maxRetries = 8;
   private retryCount = 0;
+  /** Delay (ms) before first bot start to let previous instance release connection on redeploy */
+  private readonly initialStartDelayMs = 8000;
 
   constructor(
     private readonly settingsService: SettingsService,
@@ -35,6 +37,15 @@ export class TelegramBotUpdate implements OnModuleInit, OnModuleDestroy {
         );
         return;
       }
+
+      // Clear any webhook / stale state so only polling is used and reduce 409 on redeploy
+      await this.clearTelegramConnections();
+
+      // Allow previous instance (e.g. on Render redeploy) to release getUpdates connection
+      this.logger.log(
+        `⏳ Waiting ${this.initialStartDelayMs / 1000}s before starting bot (avoids 409 on redeploy)...`
+      );
+      await this.sleep(this.initialStartDelayMs);
 
       // Start bot with auto-recovery
       await this.startBot();
@@ -363,6 +374,27 @@ export class TelegramBotUpdate implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Clear webhook and optionally close old bot state via Telegram API (raw HTTP).
+   * Call before startBot() to reduce 409 "another instance" on redeploy.
+   */
+  async clearTelegramConnections(): Promise<void> {
+    if (!this.botToken) return;
+
+    const url = `https://api.telegram.org/bot${this.botToken}/deleteWebhook?drop_pending_updates=true`;
+    try {
+      const res = await fetch(url, { method: 'POST' });
+      const data = (await res.json()) as { ok?: boolean; description?: string };
+      if (data?.ok) {
+        this.logger.log('✅ Cleared Telegram webhook (ready for polling)');
+      } else {
+        this.logger.debug('deleteWebhook response:', data?.description ?? data);
+      }
+    } catch (err) {
+      this.logger.warn('Could not clear Telegram webhook (non-fatal)', err);
+    }
+  }
+
+  /**
    * Start Telegram bot with auto-recovery for 409 errors
    */
   async startBot(): Promise<void> {
@@ -385,8 +417,8 @@ export class TelegramBotUpdate implements OnModuleInit, OnModuleDestroy {
       this.setupMessageHandlers();
       this.setupCallbackHandlers();
 
-      // Launch bot
-      await this.bot.launch();
+      // Launch bot; drop pending updates to avoid duplicate handling after restart
+      await this.bot.launch({ dropPendingUpdates: true });
       this.isRunning = true;
       this.retryCount = 0;
       this.logger.log('✅ Telegram bot started successfully');
@@ -438,28 +470,23 @@ export class TelegramBotUpdate implements OnModuleInit, OnModuleDestroy {
   private async handleStartError(error: any): Promise<void> {
     const errorMessage = error?.message || String(error);
 
-    // Check if it's a 409 Conflict error
+    // Check if it's a 409 Conflict error (another getUpdates connection still active, e.g. old instance)
     if (errorMessage.includes('409') && errorMessage.includes('Conflict')) {
       this.logger.warn(
-        `⚠️  409 Conflict detected: Another bot instance is running. ` +
+        `⚠️  409 Conflict: Another bot instance is running. ` +
         `Attempting to recover... (Retry ${this.retryCount + 1}/${this.maxRetries})`
       );
 
-      // Stop existing bot instance
-      try {
-        if (this.bot) {
-          await this.bot.telegram.deleteWebhook({ drop_pending_updates: true });
-        }
-      } catch (webhookError) {
-        this.logger.debug('Failed to delete webhook (might not exist)', webhookError);
-      }
+      // Clear webhook via raw HTTP so next start is clean
+      await this.clearTelegramConnections();
 
-      // Retry with exponential backoff
+      // Retry with longer backoff so previous instance has time to release connection
       if (this.retryCount < this.maxRetries) {
         this.retryCount++;
-        const delay = Math.min(1000 * Math.pow(2, this.retryCount), 30000); // Max 30s
+        // 10s, 20s, 30s, 45s, 60s, 60s, 60s, 60s (total ~5 min)
+        const delay = Math.min(10000 * this.retryCount, 60000);
 
-        this.logger.log(`⏳ Waiting ${delay}ms before retry...`);
+        this.logger.log(`⏳ Waiting ${delay / 1000}s before retry...`);
         await this.sleep(delay);
 
         return this.startBot();
