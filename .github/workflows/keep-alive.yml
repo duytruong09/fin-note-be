@@ -23,24 +23,30 @@ jobs:
         run: |
           echo "Pinging Render service at $(date)"
 
-          # Ping health endpoint
-          # -f: Fail silently on HTTP errors
-          # -s: Silent mode (no progress bar)
-          # -S: Show errors even in silent mode
-          # -o /dev/null: Discard response body
-          # -w "%{http_code}": Print only HTTP status code
+          # Bỏ -f để curl không fail khi 4xx/5xx (Render có thể trả 404 khi đang wake-up)
+          # Retry tối đa 3 lần vì service Free tier cần ~30-60s để wake
+          URL="https://fin-note-api.onrender.com/api/v1/health"
+          MAX_RETRIES=3
+          RETRY_DELAY=20
 
-          HTTP_CODE=$(curl -f -s -S -o /dev/null -w "%{http_code}" https://fin-note-api.onrender.com/api/v1/health)
+          for i in $(seq 1 $MAX_RETRIES); do
+            HTTP_CODE=$(curl -s -S -o /dev/null -w "%{http_code}" "$URL")
+            echo "Attempt $i/$MAX_RETRIES - Response code: $HTTP_CODE"
 
-          echo "Response code: $HTTP_CODE"
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ Service is healthy"
+              exit 0
+            fi
 
-          if [ "$HTTP_CODE" -eq 200 ]; then
-            echo "✅ Service is healthy"
-          else
-            echo "⚠️ Service returned non-200 status"
-            # Don't fail the workflow - service might be starting up
-            exit 0
-          fi
+            if [ $i -lt $MAX_RETRIES ]; then
+              echo "⏳ Waiting ${RETRY_DELAY}s before retry (service may be waking up)..."
+              sleep $RETRY_DELAY
+            fi
+          done
+
+          echo "⚠️ Service returned non-200 after $MAX_RETRIES attempts (may be waking up)"
+          # Luôn exit 0 để không trigger failure email
+          exit 0
 
       - name: Log Result
         if: always()
