@@ -9,7 +9,7 @@ on:
     # Chạy mỗi 10 phút
     # Syntax: "minute hour day month day-of-week"
     # */10 = every 10 minutes
-    - cron: '*/10 * * * *'
+    # - cron: '*/10 * * * *'
 
   # Cho phép trigger thủ công từ GitHub UI
   workflow_dispatch:
