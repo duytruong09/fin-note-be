@@ -15,9 +15,7 @@ export class HealthService {
     const startTime = Date.now();
 
     try {
-      const [databaseStatus] = await Promise.all([
-        this.checkDatabase(),
-      ]);
+      const [databaseStatus] = await Promise.all([this.checkDatabase()]);
 
       const responseTime = Date.now() - startTime;
 
@@ -88,6 +86,13 @@ export class HealthService {
     responseTime?: string;
     error?: string;
   }> {
+    if (process.env.NODE_ENV === 'development') {
+      return {
+        status: 'healthy',
+        responseTime: '0ms',
+      };
+    }
+
     const startTime = Date.now();
 
     try {

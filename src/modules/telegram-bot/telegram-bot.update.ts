@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { Telegraf, Context, Markup } from 'telegraf';
 import { Update } from 'telegraf/types';
 import { SettingsService } from '@/infrastructure/settings/settings.service';
@@ -8,9 +8,15 @@ import { TransactionsService } from '../transactions/transactions.service';
 import { TelegramUserDto } from './dto/telegram-user.dto';
 
 @Injectable()
-export class TelegramBotUpdate implements OnModuleInit {
+export class TelegramBotUpdate implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(TelegramBotUpdate.name);
   private bot: Telegraf;
+  private botToken: string | null = null;
+  private isRunning = false;
+  private maxRetries = 8;
+  private retryCount = 0;
+  /** Delay (ms) before first bot start to let previous instance release connection on redeploy */
+  private readonly initialStartDelayMs = 8000;
 
   constructor(
     private readonly settingsService: SettingsService,
@@ -22,9 +28,9 @@ export class TelegramBotUpdate implements OnModuleInit {
   async onModuleInit() {
     try {
       // Get bot token from database
-      const token = await this.settingsService.get('telegram_bot_token');
+      this.botToken = await this.settingsService.get('telegram_bot_token');
 
-      if (!token) {
+      if (!this.botToken) {
         this.logger.warn(
           '⚠️  Telegram bot token not found in settings. ' +
           'Please set it in the database with key "telegram_bot_token"'
@@ -32,19 +38,24 @@ export class TelegramBotUpdate implements OnModuleInit {
         return;
       }
 
-      // Initialize bot with token from database
-      this.bot = new Telegraf(token);
+      // Clear any webhook / stale state so only polling is used and reduce 409 on redeploy
+      await this.clearTelegramConnections();
 
-      // Setup handlers
-      this.setupCommands();
-      this.setupMessageHandlers();
-      this.setupCallbackHandlers();
+      // Allow previous instance (e.g. on Render redeploy) to release getUpdates connection
+      this.logger.log(
+        `⏳ Waiting ${this.initialStartDelayMs / 1000}s before starting bot (avoids 409 on redeploy)...`
+      );
+      await this.sleep(this.initialStartDelayMs);
 
-      // Launch bot
-      await this.launchBot();
+      // Start bot with auto-recovery
+      await this.startBot();
     } catch (error) {
       this.logger.error('Failed to initialize Telegram bot', error);
     }
+  }
+
+  async onModuleDestroy() {
+    await this.stopBot();
   }
 
   private setupCommands() {
@@ -362,16 +373,149 @@ export class TelegramBotUpdate implements OnModuleInit {
     }).format(amount);
   }
 
-  private async launchBot() {
+  /**
+   * Clear webhook and optionally close old bot state via Telegram API (raw HTTP).
+   * Call before startBot() to reduce 409 "another instance" on redeploy.
+   */
+  async clearTelegramConnections(): Promise<void> {
+    if (!this.botToken) return;
+
+    const url = `https://api.telegram.org/bot${this.botToken}/deleteWebhook?drop_pending_updates=true`;
     try {
-      await this.bot.launch();
+      const res = await fetch(url, { method: 'POST' });
+      const data = (await res.json()) as { ok?: boolean; description?: string };
+      if (data?.ok) {
+        this.logger.log('✅ Cleared Telegram webhook (ready for polling)');
+      } else {
+        this.logger.debug('deleteWebhook response:', data?.description ?? data);
+      }
+    } catch (err) {
+      this.logger.warn('Could not clear Telegram webhook (non-fatal)', err);
+    }
+  }
+
+  /**
+   * Start Telegram bot with auto-recovery for 409 errors
+   */
+  async startBot(): Promise<void> {
+    if (this.isRunning) {
+      this.logger.warn('⚠️  Bot is already running');
+      return;
+    }
+
+    if (!this.botToken) {
+      this.logger.error('❌ Cannot start bot: token not available');
+      return;
+    }
+
+    try {
+      // Initialize bot with token
+      this.bot = new Telegraf(this.botToken);
+
+      // Setup handlers
+      this.setupCommands();
+      this.setupMessageHandlers();
+      this.setupCallbackHandlers();
+
+      // Launch bot; drop pending updates to avoid duplicate handling after restart
+      await this.bot.launch({ dropPendingUpdates: true });
+      this.isRunning = true;
+      this.retryCount = 0;
       this.logger.log('✅ Telegram bot started successfully');
 
       // Enable graceful stop
-      process.once('SIGINT', () => this.bot.stop('SIGINT'));
-      process.once('SIGTERM', () => this.bot.stop('SIGTERM'));
+      process.once('SIGINT', () => this.stopBot());
+      process.once('SIGTERM', () => this.stopBot());
     } catch (error) {
+      await this.handleStartError(error);
+    }
+  }
+
+  /**
+   * Stop Telegram bot gracefully
+   */
+  async stopBot(): Promise<void> {
+    if (!this.isRunning || !this.bot) {
+      this.logger.warn('⚠️  Bot is not running');
+      return;
+    }
+
+    try {
+      this.logger.log('🛑 Stopping Telegram bot...');
+      await this.bot.stop();
+      this.isRunning = false;
+      this.logger.log('✅ Telegram bot stopped successfully');
+    } catch (error) {
+      this.logger.error('Error stopping bot', error);
+      this.isRunning = false;
+    }
+  }
+
+  /**
+   * Restart Telegram bot
+   */
+  async restartBot(): Promise<void> {
+    this.logger.log('🔄 Restarting Telegram bot...');
+    await this.stopBot();
+
+    // Wait a bit before restarting to ensure clean shutdown
+    await this.sleep(2000);
+
+    await this.startBot();
+  }
+
+  /**
+   * Handle errors when starting bot
+   */
+  private async handleStartError(error: any): Promise<void> {
+    const errorMessage = error?.message || String(error);
+
+    // Check if it's a 409 Conflict error (another getUpdates connection still active, e.g. old instance)
+    if (errorMessage.includes('409') && errorMessage.includes('Conflict')) {
+      this.logger.warn(
+        `⚠️  409 Conflict: Another bot instance is running. ` +
+        `Attempting to recover... (Retry ${this.retryCount + 1}/${this.maxRetries})`
+      );
+
+      // Clear webhook via raw HTTP so next start is clean
+      await this.clearTelegramConnections();
+
+      // Retry with longer backoff so previous instance has time to release connection
+      if (this.retryCount < this.maxRetries) {
+        this.retryCount++;
+        // 10s, 20s, 30s, 45s, 60s, 60s, 60s, 60s (total ~5 min)
+        const delay = Math.min(10000 * this.retryCount, 60000);
+
+        this.logger.log(`⏳ Waiting ${delay / 1000}s before retry...`);
+        await this.sleep(delay);
+
+        return this.startBot();
+      } else {
+        this.logger.error(
+          `❌ Failed to start bot after ${this.maxRetries} retries. ` +
+          `Please check if there are other instances running or restart manually.`
+        );
+      }
+    } else {
+      // Other errors
       this.logger.error('Failed to start Telegram bot', error);
     }
+  }
+
+  /**
+   * Get bot status
+   */
+  getBotStatus(): { isRunning: boolean; retryCount: number } {
+    return {
+      isRunning: this.isRunning,
+      retryCount: this.retryCount,
+    };
+  }
+
+  /**
+   * Sleep helper
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
