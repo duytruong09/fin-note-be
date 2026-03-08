@@ -1,4 +1,5 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Telegraf, Context, Markup } from 'telegraf';
 import { Update } from 'telegraf/types';
 import { SettingsService } from '@/infrastructure/settings/settings.service';
@@ -19,6 +20,7 @@ export class TelegramBotUpdate implements OnModuleInit, OnModuleDestroy {
   private readonly initialStartDelayMs = 8000;
 
   constructor(
+    private readonly configService: ConfigService,
     private readonly settingsService: SettingsService,
     private readonly telegramAuthService: TelegramAuthService,
     private readonly telegramVoiceService: TelegramVoiceService,
@@ -27,6 +29,12 @@ export class TelegramBotUpdate implements OnModuleInit, OnModuleDestroy {
 
   async onModuleInit() {
     try {
+      const enabled = this.configService.get<boolean>('telegram.enabled');
+      if (!enabled) {
+        this.logger.log('⏸️  Telegram bot disabled (TELEGRAM_ENABLED=false)');
+        return;
+      }
+
       // Get bot token from database
       this.botToken = await this.settingsService.get('telegram_bot_token');
 

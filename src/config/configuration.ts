@@ -40,6 +40,7 @@ export default () => ({
   },
 
   telegram: {
+    enabled: process.env.TELEGRAM_ENABLED,
     botToken: process.env.TELEGRAM_BOT_TOKEN,
     webhookUrl: process.env.TELEGRAM_WEBHOOK_URL,
   },

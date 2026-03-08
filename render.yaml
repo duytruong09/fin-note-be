@@ -85,6 +85,8 @@ services:
         value: 60
 
       # Telegram Bot (optional)
+      - key: TELEGRAM_ENABLED
+        value: "true"
       - key: TELEGRAM_BOT_TOKEN
         sync: false
 
